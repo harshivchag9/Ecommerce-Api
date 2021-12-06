@@ -1,87 +1,93 @@
-﻿using Microsoft.AspNetCore.Http;
+﻿using Ecommerse_Api.Models;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
+using Newtonsoft.Json;
+using ProjectApi.Models;
 using System;
 using System.Collections.Generic;
+using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
+using System.Security.Claims;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace Ecommerse_Api.Controllers
 {
+    [Route("api/Users")]
     public class UserController : Controller
     {
-        // GET: UserController
-        public ActionResult Index()
+        private readonly EcomContext _context;
+        private readonly JWTSettings _jwtsettings;
+        private User user;
+        public UserController(EcomContext dbContext, IOptions<JWTSettings> jwtsettings)
         {
-            return View();
+            _context = dbContext;
+            _jwtsettings = jwtsettings.Value;
+        }
+        public IActionResult Index()
+        {
+            return View();  
         }
 
-        // GET: UserController/Details/5
-        public ActionResult Details(int id)
-        {
-            return View();
-        }
-
-        // GET: UserController/Create
-        public ActionResult Create()
-        {
-            return View();
-        }
-
-        // POST: UserController/Create
+        [Route("register")]
         [HttpPost]
-        [ValidateAntiForgeryToken]
-        public ActionResult Create(IFormCollection collection)
+        public IActionResult register([FromBody] User user)
         {
             try
             {
-                return RedirectToAction(nameof(Index));
+            _context.Users.Add(user);
+            _context.SaveChanges();
             }
-            catch
+            catch(Exception e)
             {
-                return View();
+                Console.WriteLine(e);
             }
+            return Ok(user);
         }
 
-        // GET: UserController/Edit/5
-        public ActionResult Edit(int id)
-        {
-            return View();
-        }
-
-        // POST: UserController/Edit/5
         [HttpPost]
-        [ValidateAntiForgeryToken]
-        public ActionResult Edit(int id, IFormCollection collection)
+        [Route("login")]
+        public IActionResult login([FromBody] LoginModel content)
         {
-            try
-            {
-                return RedirectToAction(nameof(Index));
-            }
-            catch
-            {
-                return View();
-            }
-        }
+            user =  _context.Users.Where(u => u.Email == content.Email && u.Password == content.Password).FirstOrDefault();
 
-        // GET: UserController/Delete/5
-        public ActionResult Delete(int id)
-        {
-            return View();
-        }
 
-        // POST: UserController/Delete/5
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public ActionResult Delete(int id, IFormCollection collection)
+            Models.AuthenticationToken authenticationToken = null;
+
+            if (user != null)
+            {
+                authenticationToken = new Models.AuthenticationToken(user);
+            }
+
+            if (authenticationToken == null)
+            {
+                return NotFound();
+            }
+
+            authenticationToken.AccessToken = GenerateAccessToken(authenticationToken);
+            return Ok(authenticationToken);
+        }
+        private string GenerateAccessToken(Models.AuthenticationToken auth)
         {
-            try
+            var tokenHandler = new JwtSecurityTokenHandler();
+            var key = Encoding.ASCII.GetBytes(_jwtsettings.SecretKey);
+            var tokenDescriptor = new SecurityTokenDescriptor
             {
-                return RedirectToAction(nameof(Index));
-            }
-            catch
-            {
-                return View();
-            }
+                Subject = new ClaimsIdentity(new Claim[]
+                {
+                    new Claim("Email", Convert.ToString(auth.Email))
+                     //new Claim(ClaimTypes.Role, auth.Roles)
+                    //new Claim("CompanyId", Convert.ToString(auth.RefreshToken))
+                }),
+                Expires = DateTime.UtcNow.AddDays(1),
+                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key),
+                SecurityAlgorithms.HmacSha256Signature)
+            };
+            var token = tokenHandler.CreateToken(tokenDescriptor);
+            return tokenHandler.WriteToken(token);
         }
     }
 }
