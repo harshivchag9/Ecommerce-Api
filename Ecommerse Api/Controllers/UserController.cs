@@ -1,5 +1,6 @@
 ﻿using Ecommerse_Api.Models;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
@@ -22,6 +23,8 @@ namespace Ecommerse_Api.Controllers
         private readonly EcomContext _context;
         private readonly JWTSettings _jwtsettings;
         private User user;
+        private ResponseMessage response;
+
         public UserController(EcomContext dbContext, IOptions<JWTSettings> jwtsettings)
         {
             _context = dbContext;
@@ -30,6 +33,55 @@ namespace Ecommerse_Api.Controllers
         public IActionResult Index()
         {
             return View();  
+        }
+
+        [Authorize(Roles = Role.Admin)]
+        [Route("getusers")]
+        [HttpGet]
+        public IActionResult getUsers()
+        {
+            return Ok(_context.Users.ToList());
+        }
+
+
+        [Authorize]
+        [Route("getuserdetails")]
+        [HttpPost]
+        public IActionResult getUSerDetails([FromForm] string email)
+        {
+            return Ok(_context.Users.Where(x=>x.Email == email).ToList());
+        }
+
+        [Authorize]
+        [Route("editprofile")]
+        [HttpPost]
+        public IActionResult updateUsers([FromBody] User currentUser)
+        {
+            try
+            {
+                var update = _context.Users.FirstOrDefault(e => e.Id == currentUser.Id);
+                if (update != null)
+                {
+                    update.Name = currentUser.Name;
+                    update.Email = currentUser.Email;
+                    update.Password = currentUser.Password;
+                    update.Roles = "9";
+                }
+                else
+                {
+                    this.response = new ResponseMessage(0, "false", 403, "");
+                    return NotFound(this.response);
+                }
+                _context.SaveChanges();
+            }
+            catch (Exception e)
+            {
+                this.response = new ResponseMessage(0, "false", 403, "Something Went Wrong");
+                Console.WriteLine(e);
+                return NotFound(this.response);
+            }
+            this.response = new ResponseMessage(0, "true", 200, "Data Updated Successfully");
+            return Ok(this.response);
         }
 
         [Route("register")]
@@ -44,6 +96,7 @@ namespace Ecommerse_Api.Controllers
             catch(Exception e)
             {
                 Console.WriteLine(e);
+                return NotFound();
             }
             return Ok(user);
         }
@@ -78,9 +131,8 @@ namespace Ecommerse_Api.Controllers
             {
                 Subject = new ClaimsIdentity(new Claim[]
                 {
-                    new Claim("Email", Convert.ToString(auth.Email))
-                     //new Claim(ClaimTypes.Role, auth.Roles)
-                    //new Claim("CompanyId", Convert.ToString(auth.RefreshToken))
+                    new Claim("Email", Convert.ToString(auth.Email)),
+                    new Claim(ClaimTypes.Role, auth.Roles)
                 }),
                 Expires = DateTime.UtcNow.AddDays(1),
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key),

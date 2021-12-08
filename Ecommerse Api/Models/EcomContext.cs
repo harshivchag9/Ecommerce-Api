@@ -44,6 +44,10 @@ namespace Ecommerse_Api.Models
                 entity.Property(e => e.Password)
                     .HasMaxLength(100)
                     .IsFixedLength(true);
+
+                entity.Property(e => e.Roles)
+                    .HasMaxLength(20)
+                    .IsFixedLength(true);
             });
 
             OnModelCreatingPartial(modelBuilder);
