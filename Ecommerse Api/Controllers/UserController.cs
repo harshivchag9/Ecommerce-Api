@@ -30,6 +30,8 @@ namespace Ecommerse_Api.Controllers
             _context = dbContext;
             _jwtsettings = jwtsettings.Value;
         }
+
+        [HttpGet]
         public IActionResult Index()
         {
             return View();  
@@ -41,6 +43,40 @@ namespace Ecommerse_Api.Controllers
         public IActionResult getUsers()
         {
             return Ok(_context.Users.ToList());
+        }
+
+
+        [Authorize(Roles = Role.Admin)]
+        [Route("edituser")]
+        [HttpPost]
+        public IActionResult editUser([FromBody] User user)
+        {
+            Console.WriteLine(user.Roles);
+            try
+            {
+                var update = _context.Users.FirstOrDefault(e => e.Id == user.Id);
+                if (update != null)
+                {
+                    update.Name = user.Name;
+                    update.Email = user.Email;
+                    update.Password = user.Password;
+                    update.Roles = user.Roles;
+                }
+                else
+                {
+                    this.response = new ResponseMessage(0, "false", 403, "Something Went Wrong");
+                    return NotFound(this.response);
+                }
+                _context.SaveChanges();
+            }
+            catch (Exception e)
+            {
+                this.response = new ResponseMessage(0, "false", 403, "Something Went Wrong");
+                Console.WriteLine(e);
+                return NotFound(this.response);
+            }
+            this.response = new ResponseMessage(0, "true", 200, "Product Updated Successfully");
+            return Ok(this.response);
         }
 
 
@@ -69,7 +105,7 @@ namespace Ecommerse_Api.Controllers
                 }
                 else
                 {
-                    this.response = new ResponseMessage(0, "false", 403, "");
+                    this.response = new ResponseMessage(0, "false", 403, "Something Went Wrong");
                     return NotFound(this.response);
                 }
                 _context.SaveChanges();
@@ -96,33 +132,79 @@ namespace Ecommerse_Api.Controllers
             catch(Exception e)
             {
                 Console.WriteLine(e);
-                return NotFound();
+                this.response = new ResponseMessage(0, "false", 200, "Something Went Wrong");
+                return NotFound(this.response);
             }
-            return Ok(user);
+            this.response = new ResponseMessage(0, "true", 200, "User Register Successfully");
+            return Ok(this.response);
         }
 
         [HttpPost]
         [Route("login")]
         public IActionResult login([FromBody] LoginModel content)
         {
-            user =  _context.Users.Where(u => u.Email == content.Email && u.Password == content.Password).FirstOrDefault();
-
-
-            Models.AuthenticationToken authenticationToken = null;
-
-            if (user != null)
+            try
             {
-                authenticationToken = new Models.AuthenticationToken(user);
-            }
+                user =  _context.Users.Where(u => u.Email == content.Email && u.Password == content.Password).FirstOrDefault();
+                Models.AuthenticationToken authenticationToken = null;
+                if (user != null)
+                {
+                    authenticationToken = new Models.AuthenticationToken(user);
+                }
+                else 
+                { 
+                    this.response = new ResponseMessage(0, "false", 404, "Email or Password is incorrect");
+                    return Ok(this.response);
+                }
+                if (authenticationToken == null)
+                {
+                    this.response = new ResponseMessage(0, "false", 404, "Email or Password is incorrect");
+                    return Ok(this.response);
+                }
+                authenticationToken.AccessToken = GenerateAccessToken(authenticationToken);
+                authenticationToken.responseBool = "true";
+                return Ok(authenticationToken);
 
-            if (authenticationToken == null)
+            }
+            catch(Exception e)
             {
-                return NotFound();
+                this.response = new ResponseMessage(0, "false", 404, "Something Went Wrong");
+                return Ok(this.response);
             }
-
-            authenticationToken.AccessToken = GenerateAccessToken(authenticationToken);
-            return Ok(authenticationToken);
         }
+
+        [Authorize(Roles = Role.Admin)]
+        [Route("deleteuser/{id}")]
+        [HttpPost]
+        public IActionResult deleteProduct(int id)
+        {
+            try
+            {
+                var itemToRemove = _context.Users.SingleOrDefault(x => x.Id == id);
+                if (itemToRemove != null)
+                {
+                    _context.Users.Remove(itemToRemove);
+                    _context.SaveChanges();
+                }
+                else
+                {
+                    this.response = new ResponseMessage(0, "false", 200, "User Not Found.");
+                    return NotFound(this.response);
+                }
+                _context.SaveChanges();
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+                this.response = new ResponseMessage(0, "false", 200, "Something Went Wrong");
+                return NotFound(this.response);
+            }
+            this.response = new ResponseMessage(0, "true", 200, "User Deleted Successfully");
+            return Ok(this.response);
+        }
+
+
+
         private string GenerateAccessToken(Models.AuthenticationToken auth)
         {
             var tokenHandler = new JwtSecurityTokenHandler();

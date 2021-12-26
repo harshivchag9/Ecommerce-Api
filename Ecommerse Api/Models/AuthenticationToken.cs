@@ -8,6 +8,7 @@ namespace Ecommerse_Api.Models
 {
     public partial class AuthenticationToken : User
     {
+        public string responseBool { get; set; }
         public string AccessToken { get; set; }
         public ClaimsIdentity Role { get; internal set; }
 
